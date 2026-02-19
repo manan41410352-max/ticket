@@ -24,13 +24,13 @@ def health(_request):
         {
             'status': 'ok',
             'service': 'ticket-backend',
-            'endpoints': ['/admin/', '/api/tickets/'],
+            'endpoints': ['/admin/', '/api/health/', '/api/tickets/'],
         }
     )
 
 
 urlpatterns = [
-    path('', health, name='health'),
+    path('', health, name='root-health'),
     path('api/', include('tickets.urls')),
     path('admin/', admin.site.urls),
 ]

@@ -54,6 +54,16 @@ class TicketStatsView(APIView):
         )
 
 
+class HealthCheckView(APIView):
+    def get(self, request):
+        return Response(
+            {
+                'status': 'ok',
+                'service': 'ticket-backend',
+            }
+        )
+
+
 class TicketClassifyView(APIView):
     def post(self, request):
         description = request.data.get('description')

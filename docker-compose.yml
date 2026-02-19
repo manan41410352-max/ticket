@@ -11,28 +11,36 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tickets"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   backend:
     build: ./backend
     container_name: ticket-backend
-    command: >
-      sh -c "
-      python manage.py migrate &&
-      gunicorn config.wsgi:application --bind 0.0.0.0:8000
-      "
+    command: ["sh", "/app/entrypoint.sh"]
+    restart: unless-stopped
     volumes:
       - ./backend:/app
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    env_file:
+      - ./.env
     environment:
+      DEBUG: "False"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,backend"
       POSTGRES_DB: tickets
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
 
   frontend:
     build: ./frontend

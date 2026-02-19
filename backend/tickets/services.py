@@ -1,7 +1,10 @@
 import json
+import logging
 import os
 
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """
@@ -54,6 +57,7 @@ def classify_ticket(description: str):
             'suggested_priority': parsed.get('priority'),
         }
     except Exception:
+        logger.exception('LLM classification failed')
         return {
             'suggested_category': None,
             'suggested_priority': None,

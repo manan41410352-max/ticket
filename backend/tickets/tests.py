@@ -236,6 +236,16 @@ class TicketClassifyViewTests(APITestCase):
         )
 
 
+class HealthCheckViewTests(APITestCase):
+    def test_health_check(self):
+        response = self.client.get(reverse('health'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data,
+            {'status': 'ok', 'service': 'ticket-backend'},
+        )
+
+
 class TicketClassificationServiceTests(SimpleTestCase):
     @patch.dict(os.environ, {'OPENAI_API_KEY': ''}, clear=False)
     def test_classify_ticket_without_api_key_returns_nulls(self):
