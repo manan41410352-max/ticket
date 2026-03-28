@@ -3,4 +3,3 @@ djangorestframework
 psycopg2-binary
 django-filter
 gunicorn
-openai>=1.0.0

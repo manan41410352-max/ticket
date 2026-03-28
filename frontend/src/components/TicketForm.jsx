@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 
 const DEFAULT_CATEGORY = 'general';
 const DEFAULT_PRIORITY = 'low';
@@ -16,64 +16,68 @@ export default function TicketForm({ onSubmitTicket, onClassify }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('muted');
-  const debounceRef = useRef(null);
 
-  useEffect(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
+  function handleDescriptionChange(event) {
+    const nextDescription = event.target.value;
+    setDescription(nextDescription);
 
-    if (!description.trim()) {
+    if (!nextDescription.trim()) {
       setCategory(DEFAULT_CATEGORY);
       setPriority(DEFAULT_PRIORITY);
       setMessage('');
       setMessageType('muted');
-      setIsAnalyzing(false);
       return;
     }
 
-    debounceRef.current = setTimeout(async () => {
-      setIsAnalyzing(true);
-      setMessage('Analyzing...');
-      setMessageType('muted');
+    setCategory(DEFAULT_CATEGORY);
+    setPriority(DEFAULT_PRIORITY);
+    setMessage('Click Submit for AI suggestion');
+    setMessageType('muted');
+  }
 
-      try {
-        const suggestion = await onClassify(description.trim());
-        const suggestedCategory = normalizeSuggestion(
-          suggestion?.suggested_category,
-          DEFAULT_CATEGORY
-        );
-        const suggestedPriority = normalizeSuggestion(
-          suggestion?.suggested_priority,
-          DEFAULT_PRIORITY
-        );
+  async function handleAnalyzeClick() {
+    if (!description.trim()) {
+      setCategory(DEFAULT_CATEGORY);
+      setPriority(DEFAULT_PRIORITY);
+      setMessage('Enter a description first.');
+      setMessageType('error');
+      return;
+    }
 
-        setCategory(suggestedCategory);
-        setPriority(suggestedPriority);
+    setIsAnalyzing(true);
+    setMessage('Analyzing...');
+    setMessageType('muted');
 
-        if (!suggestion?.suggested_category || !suggestion?.suggested_priority) {
-          setMessage('AI suggestion unavailable');
-          setMessageType('muted');
-        } else {
-          setMessage('AI Suggested');
-          setMessageType('success');
-        }
-      } catch (_error) {
-        setCategory(DEFAULT_CATEGORY);
-        setPriority(DEFAULT_PRIORITY);
+    try {
+      const suggestion = await onClassify(description.trim());
+      const suggestedCategory = normalizeSuggestion(
+        suggestion?.suggested_category,
+        DEFAULT_CATEGORY
+      );
+      const suggestedPriority = normalizeSuggestion(
+        suggestion?.suggested_priority,
+        DEFAULT_PRIORITY
+      );
+
+      setCategory(suggestedCategory);
+      setPriority(suggestedPriority);
+
+      if (!suggestion?.suggested_category || !suggestion?.suggested_priority) {
         setMessage('AI suggestion unavailable');
         setMessageType('muted');
-      } finally {
-        setIsAnalyzing(false);
+      } else {
+        setMessage('AI suggestion ready');
+        setMessageType('success');
       }
-    }, 500);
-
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-    };
-  }, [description, onClassify]);
+    } catch (_error) {
+      setCategory(DEFAULT_CATEGORY);
+      setPriority(DEFAULT_PRIORITY);
+      setMessage('AI suggestion unavailable');
+      setMessageType('muted');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -122,7 +126,7 @@ export default function TicketForm({ onSubmitTicket, onClassify }) {
           <textarea
             required
             value={description}
-            onChange={(event) => setDescription(event.target.value)}
+            onChange={handleDescriptionChange}
             placeholder="Describe the issue in detail"
           />
         </label>
@@ -143,9 +147,20 @@ export default function TicketForm({ onSubmitTicket, onClassify }) {
           </p>
         </div>
 
-        <button className="btn" type="submit" disabled={isSubmitting}>
-          {isSubmitting ? 'Submitting...' : 'Create Ticket'}
-        </button>
+        <div className="button-row">
+          <button
+            className="btn secondary"
+            type="button"
+            onClick={handleAnalyzeClick}
+            disabled={isAnalyzing || isSubmitting}
+          >
+            {isAnalyzing ? 'Submitting...' : 'Submit'}
+          </button>
+
+          <button className="btn" type="submit" disabled={isSubmitting || isAnalyzing}>
+            {isSubmitting ? 'Creating...' : 'Create Ticket'}
+          </button>
+        </div>
       </form>
     </section>
   );

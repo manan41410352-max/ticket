@@ -1,6 +1,7 @@
-import os
+import json
 from datetime import timedelta
 from unittest.mock import patch
+from urllib.error import URLError
 
 from django.test import SimpleTestCase
 from django.urls import reverse
@@ -10,6 +11,20 @@ from rest_framework.test import APITestCase
 
 from .models import Ticket
 from .services import classify_ticket
+
+
+class FakeHTTPResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def read(self):
+        return json.dumps(self.payload).encode('utf-8')
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
 
 
 class TicketListFilteringTests(APITestCase):
@@ -221,8 +236,8 @@ class TicketClassifyViewTests(APITestCase):
             {'suggested_category': 'billing', 'suggested_priority': 'high'},
         )
 
-    @patch.dict(os.environ, {'OPENAI_API_KEY': ''}, clear=False)
-    def test_missing_api_key_returns_null_suggestions(self):
+    @patch('tickets.services.urlopen', side_effect=URLError('ollama offline'))
+    def test_ollama_failure_returns_null_suggestions(self, _mock_urlopen):
         response = self.client.post(
             self.classify_url,
             {'description': 'Payment failed and I need urgent help.'},
@@ -247,8 +262,37 @@ class HealthCheckViewTests(APITestCase):
 
 
 class TicketClassificationServiceTests(SimpleTestCase):
-    @patch.dict(os.environ, {'OPENAI_API_KEY': ''}, clear=False)
-    def test_classify_ticket_without_api_key_returns_nulls(self):
+    @patch('tickets.services.urlopen')
+    def test_classify_ticket_returns_ollama_suggestions(self, mock_urlopen):
+        mock_urlopen.return_value = FakeHTTPResponse(
+            {
+                'message': {
+                    'content': json.dumps(
+                        {
+                            'category': 'billing',
+                            'priority': 'high',
+                        }
+                    )
+                }
+            }
+        )
+
+        result = classify_ticket('Credit card charged twice')
+
+        request = mock_urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode('utf-8'))
+
+        self.assertEqual(payload['model'], 'llama3.1:8b')
+        self.assertEqual(
+            result,
+            {'suggested_category': 'billing', 'suggested_priority': 'high'},
+        )
+
+    @patch('tickets.services.urlopen', side_effect=URLError('ollama offline'))
+    def test_classify_ticket_when_ollama_unavailable_returns_nulls(
+        self,
+        _mock_urlopen,
+    ):
         result = classify_ticket('Any description')
         self.assertEqual(
             result,

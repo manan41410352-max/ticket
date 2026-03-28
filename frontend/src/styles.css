@@ -140,9 +140,29 @@ textarea {
   background: var(--btn-hover);
 }
 
+.btn.secondary {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+}
+
+.btn.secondary:hover {
+  background: #f5f8fa;
+}
+
 .btn:disabled {
   opacity: 0.78;
   cursor: not-allowed;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.button-row .btn {
+  flex: 1 1 220px;
 }
 
 .suggestion-header {
