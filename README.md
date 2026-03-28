@@ -1,32 +1,61 @@
 # Ticket Support System
 
-## Local Runbook
+An open-source support ticket application with a React frontend, a Django REST backend, and an optional local AI classification bridge powered by the vendored `freeloader` runtime.
 
-This repo can run locally without Docker:
+## Highlights
 
-- Backend defaults to SQLite when `POSTGRES_*` environment variables are not set.
-- Frontend can be served locally on port `3000` with a lightweight proxy that forwards `/api` to Django on port `8000`.
+- create, list, filter, search, and update support tickets
+- view ticket statistics from the admin dashboard
+- classify tickets into category and priority using a local OpenAI-compatible proxy
+- run locally without Docker or with a Docker Compose stack
+- keep AI classification non-blocking when the local browser-based AI layer is unavailable
 
-### Install
+## Tech Stack
+
+- Frontend: React + esbuild
+- Backend: Django + Django REST Framework
+- Database: SQLite for local development, PostgreSQL in Docker
+- AI bridge: local OpenAI-compatible proxy backed by vendored `freeloader`
+
+## Repository Structure
+
+```text
+backend/      Django API and data model
+frontend/     React application and static server
+freeloader/   Vendored local browser-driven AI runtime
+```
+
+## Quick Start
+
+### Local
 
 ```powershell
 python -m venv .venv
+.\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -r backend\requirements.txt
+.\.venv\Scripts\python -m pip install -r freeloader\requirements.txt
+.\.venv\Scripts\python -m playwright install chromium
 cd frontend
 npm install --no-package-lock
 npm run build
+cd ..
 ```
 
-### Start locally
-
-Backend:
+Start the backend:
 
 ```powershell
 .\.venv\Scripts\python backend\manage.py migrate
 .\.venv\Scripts\python backend\manage.py runserver 127.0.0.1:8000
 ```
 
-Frontend:
+Start the local AI proxy in another terminal:
+
+```powershell
+$env:FREELOADER_BROWSER_MODE="managed"
+.\.venv\Scripts\python chatgpt_openai_proxy.py --host 127.0.0.1 --port 11435
+```
+
+Start the frontend in a third terminal:
 
 ```powershell
 cd frontend
@@ -35,111 +64,80 @@ npm run serve
 
 Open `http://127.0.0.1:3000`.
 
-AI classification uses your local Ollama server by default:
+### Docker
+
+Copy the example environment file:
 
 ```powershell
-ollama serve
+Copy-Item .env.example .env
 ```
 
-The backend defaults to:
+Run the local AI proxy on the host:
 
-```env
-OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=llama3.1:8b
+```powershell
+$env:FREELOADER_BROWSER_MODE="managed"
+.\.venv\Scripts\python chatgpt_openai_proxy.py --host 127.0.0.1 --port 11435
 ```
 
-If Ollama is unavailable, ticket creation still works and the classifier returns null suggestions.
+Then start the stack:
 
-## Linux Docker Runbook
-
-### Prerequisites
-- Docker Engine is running.
-- Your Linux user is in the `docker` group.
-
-Check:
-
-```bash
-docker info
-id
-groups
-```
-
-If needed:
-
-```bash
-sudo usermod -aG docker "$USER"
-newgrp docker
-```
-
-### Environment Setup
-
-Create a **root-level** `.env` file (same directory as `docker-compose.yml`):
-
-```env
-OLLAMA_BASE_URL=http://host.docker.internal:11434
-OLLAMA_MODEL=llama3.1:8b
-```
-
-`.env` is git-ignored and should never be committed.
-
-`docker-compose.yml` injects this into backend with:
-
-```yaml
-env_file:
-  - ./.env
-environment:
-  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-  OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
-```
-
-After creating or updating `.env`, rebuild/restart containers:
-
-```bash
-docker compose down
-docker compose up --build -d
-```
-
-### Start stack
-
-```bash
+```powershell
 docker compose up --build
 ```
 
-Or detached:
+## Documentation
 
-```bash
-docker compose up --build -d
+- [Install Guide](INSTALL.md)
+- [Usage Guide](USAGE.md)
+- [Contributing Guide](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [Third-Party Notices](THIRD_PARTY_NOTICES.md)
+
+## API Overview
+
+Backend base URL: `http://127.0.0.1:8000/api`
+
+- `GET /health/`
+- `GET /tickets/`
+- `POST /tickets/`
+- `PATCH /tickets/{id}/`
+- `GET /tickets/stats/`
+- `POST /tickets/classify/`
+
+AI proxy base URL: `http://127.0.0.1:11435/v1`
+
+- `GET /models`
+- `POST /chat/completions`
+- `POST /responses`
+
+## Open-Source Notes
+
+- The repository includes a vendored copy of `freeloader` under `freeloader/`.
+- Keep vendored notices and license files intact when redistributing the project.
+- The local AI integration depends on a browser session and may require signing in to ChatGPT.
+
+## Validation
+
+Backend tests:
+
+```powershell
+.\.venv\Scripts\python backend\manage.py test tickets
 ```
 
-### What changed for reliability
-- Postgres now has a healthcheck (`pg_isready`).
-- Backend now waits/retries for DB before migrations.
-- Backend uses `restart: unless-stopped`.
-- Backend depends on DB health (`service_healthy`) instead of start order only.
+Frontend build:
 
-### Diagnostics
-
-```bash
-docker compose ps -a
-docker compose logs --no-color backend db
-docker compose config
+```powershell
+cd frontend
+npm run build
 ```
 
-### Smoke checks
+Proxy sanity:
 
-```bash
-curl -sS http://localhost:8000/api/health/ | jq .
-curl -I http://localhost:3000/
+```powershell
+.\.venv\Scripts\python chatgpt_openai_proxy.py --version
+.\.venv\Scripts\python -m freeloader --version
 ```
 
-## Design Decisions
-- `Ollama` with `llama3.1:8b` for classification:
-  local inference keeps ticket categorization on-device while still giving flexible category/priority suggestions from free-form text.
-- Postgres healthchecks:
-  `pg_isready` gates backend startup on database readiness instead of container start order.
-- Backend entrypoint wait/retry:
-  bounded retries prevent race-condition crashes on cold starts and improve Linux Docker reliability.
-- DB-level stats aggregation:
-  stats endpoint uses ORM aggregations (`Count`, `Avg`, `TruncDate`) for efficient summary queries.
-- Classification fallback:
-  when Ollama is unavailable or the model response is invalid, API returns null suggestions so ticket creation remains non-blocking.
+## License
+
+This repository is released under the [MIT License](LICENSE).

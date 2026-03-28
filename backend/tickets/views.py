@@ -67,6 +67,7 @@ class HealthCheckView(APIView):
 class TicketClassifyView(APIView):
     def post(self, request):
         description = request.data.get('description')
+        title = request.data.get('title', '')
 
         if not description:
             return Response(
@@ -74,5 +75,5 @@ class TicketClassifyView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        result = classify_ticket(description)
+        result = classify_ticket(description, title=title)
         return Response(result, status=status.HTTP_200_OK)

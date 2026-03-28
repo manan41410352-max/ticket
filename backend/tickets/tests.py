@@ -1,4 +1,5 @@
 import json
+import subprocess
 from datetime import timedelta
 from unittest.mock import patch
 from urllib.error import URLError
@@ -236,8 +237,11 @@ class TicketClassifyViewTests(APITestCase):
             {'suggested_category': 'billing', 'suggested_priority': 'high'},
         )
 
-    @patch('tickets.services.urlopen', side_effect=URLError('ollama offline'))
-    def test_ollama_failure_returns_null_suggestions(self, _mock_urlopen):
+    @patch(
+        'tickets.services.subprocess.run',
+        side_effect=subprocess.TimeoutExpired(cmd='python -m freeloader', timeout=60),
+    )
+    def test_freeloader_failure_returns_null_suggestions(self, _mock_run):
         response = self.client.post(
             self.classify_url,
             {'description': 'Payment failed and I need urgent help.'},
@@ -262,36 +266,112 @@ class HealthCheckViewTests(APITestCase):
 
 
 class TicketClassificationServiceTests(SimpleTestCase):
+    @patch.dict(
+        'os.environ',
+        {'OPENAI_PROXY_BASE_URL': 'http://proxy.test/v1'},
+        clear=False,
+    )
     @patch('tickets.services.urlopen')
-    def test_classify_ticket_returns_ollama_suggestions(self, mock_urlopen):
+    def test_classify_ticket_prefers_openai_proxy(self, mock_urlopen):
         mock_urlopen.return_value = FakeHTTPResponse(
             {
-                'message': {
-                    'content': json.dumps(
-                        {
-                            'category': 'billing',
-                            'priority': 'high',
+                'choices': [
+                    {
+                        'message': {
+                            'content': json.dumps(
+                                {
+                                    'category': 'technical',
+                                    'priority': 'medium',
+                                }
+                            )
                         }
-                    )
-                }
+                    }
+                ]
             }
         )
 
-        result = classify_ticket('Credit card charged twice')
+        result = classify_ticket('API timeout', title='Bridge check')
 
         request = mock_urlopen.call_args.args[0]
         payload = json.loads(request.data.decode('utf-8'))
 
-        self.assertEqual(payload['model'], 'llama3.1:8b')
+        self.assertEqual(request.full_url, 'http://proxy.test/v1/chat/completions')
+        self.assertEqual(payload['model'], 'freeloader')
+        self.assertFalse(payload['stream'])
+        self.assertEqual(payload['messages'][0]['role'], 'user')
+        self.assertIn('Title: Bridge check', payload['messages'][0]['content'])
+        self.assertIn('Description: API timeout', payload['messages'][0]['content'])
+        self.assertEqual(
+            result,
+            {'suggested_category': 'technical', 'suggested_priority': 'medium'},
+        )
+
+    @patch.dict(
+        'os.environ',
+        {'OPENAI_PROXY_BASE_URL': 'http://proxy.test/v1'},
+        clear=False,
+    )
+    @patch('tickets.services.urlopen', side_effect=URLError('bridge offline'))
+    def test_classify_ticket_proxy_failure_returns_nulls(self, _mock_urlopen):
+        result = classify_ticket('Any description', title='Bridge fail')
+        self.assertEqual(
+            result,
+            {'suggested_category': None, 'suggested_priority': None},
+        )
+
+    @patch('tickets.services.subprocess.run')
+    def test_classify_ticket_returns_freeloader_suggestions(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=['python', '-m', 'freeloader', 'ask'],
+            returncode=0,
+            stdout='{"category":"billing","priority":"high"}',
+            stderr='',
+        )
+
+        result = classify_ticket(
+            'Credit card charged twice',
+            title='Double charge',
+        )
+
+        command = mock_run.call_args.args[0]
+        prompt = command[4]
+
+        self.assertEqual(command[1], '-m')
+        self.assertEqual(command[2], 'freeloader')
+        self.assertEqual(command[3], 'ask')
+        self.assertIn('Title: Double charge', prompt)
+        self.assertIn('Description: Credit card charged twice', prompt)
         self.assertEqual(
             result,
             {'suggested_category': 'billing', 'suggested_priority': 'high'},
         )
 
-    @patch('tickets.services.urlopen', side_effect=URLError('ollama offline'))
-    def test_classify_ticket_when_ollama_unavailable_returns_nulls(
+    @patch(
+        'tickets.services.subprocess.run',
+        return_value=subprocess.CompletedProcess(
+            args=['python', '-m', 'freeloader', 'ask'],
+            returncode=0,
+            stdout='{"category": "unknown", "priority": "urgent"}',
+            stderr='',
+        ),
+    )
+    def test_classify_ticket_invalid_freeloader_values_return_nulls(
         self,
-        _mock_urlopen,
+        _mock_run,
+    ):
+        result = classify_ticket('Any description', title='Any title')
+        self.assertEqual(
+            result,
+            {'suggested_category': None, 'suggested_priority': None},
+        )
+
+    @patch(
+        'tickets.services.subprocess.run',
+        side_effect=subprocess.TimeoutExpired(cmd='python -m freeloader', timeout=60),
+    )
+    def test_classify_ticket_when_freeloader_unavailable_returns_nulls(
+        self,
+        _mock_run,
     ):
         result = classify_ticket('Any description')
         self.assertEqual(

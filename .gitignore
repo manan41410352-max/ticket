@@ -4,7 +4,14 @@ env/
 __pycache__/
 *.py[cod]
 *.log
+*.pid
 *.sqlite3
+.coverage
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+coverage/
+freeloader/freeloader_profile/
 
 node_modules/
 frontend/node_modules/
