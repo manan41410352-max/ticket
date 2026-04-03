@@ -10,6 +10,29 @@ This document covers the supported ways to install and run the project.
 - Docker Desktop, if you want the containerized workflow
 - A ChatGPT-capable browser session for the local AI integration
 
+## Short Commands
+
+The simplest local workflow from the repository root is:
+
+```powershell
+.\run.cmd
+```
+
+On the first run, `run.cmd` will set up missing local dependencies, apply migrations, build the frontend, and open the app in your default browser. If Brave is installed, the local AI worker prefers Brave over Edge.
+
+To keep the local AI browser worker in the background, use:
+
+```powershell
+.\run.cmd -HeadlessAI
+```
+
+If you prefer to keep install and run separate, use:
+
+```powershell
+.\setup.cmd
+.\run.cmd
+```
+
 ## Local Development Setup
 
 From the repository root:
@@ -28,6 +51,20 @@ cd ..
 
 ## Local Runtime
 
+The helper command above is the recommended path:
+
+```powershell
+.\run.cmd
+```
+
+To keep the AI helper browser in the background:
+
+```powershell
+.\run.cmd -HeadlessAI
+```
+
+If you want to start each process manually, use the commands below.
+
 Start the backend:
 
 ```powershell
@@ -35,11 +72,11 @@ Start the backend:
 .\.venv\Scripts\python backend\manage.py runserver 127.0.0.1:8000
 ```
 
-Start the local AI proxy in a second terminal:
+Start the Freeloader service in a second terminal:
 
 ```powershell
-$env:FREELOADER_BROWSER_MODE="managed"
-.\.venv\Scripts\python chatgpt_openai_proxy.py --host 127.0.0.1 --port 11435
+$env:FREELOADER_BROWSER_MODE="auto"
+.\.venv\Scripts\python -m freeloader serve --host 127.0.0.1 --port 11435
 ```
 
 Start the frontend in a third terminal:
@@ -59,11 +96,11 @@ Copy the root environment template:
 Copy-Item .env.example .env
 ```
 
-Start the AI proxy on the host:
+Start the Freeloader service on the host:
 
 ```powershell
-$env:FREELOADER_BROWSER_MODE="managed"
-.\.venv\Scripts\python chatgpt_openai_proxy.py --host 127.0.0.1 --port 11435
+$env:FREELOADER_BROWSER_MODE="auto"
+.\.venv\Scripts\python -m freeloader serve --host 127.0.0.1 --port 11435
 ```
 
 Then start the app stack:
@@ -80,7 +117,7 @@ Backend health:
 Invoke-WebRequest http://127.0.0.1:8000/api/health/ | Select-Object -ExpandProperty Content
 ```
 
-AI proxy health:
+Freeloader health:
 
 ```powershell
 Invoke-WebRequest http://127.0.0.1:11435/health | Select-Object -ExpandProperty Content

@@ -268,11 +268,11 @@ class HealthCheckViewTests(APITestCase):
 class TicketClassificationServiceTests(SimpleTestCase):
     @patch.dict(
         'os.environ',
-        {'OPENAI_PROXY_BASE_URL': 'http://proxy.test/v1'},
+        {'FREELOADER_API_BASE_URL': 'http://freeloader.test/v1'},
         clear=False,
     )
     @patch('tickets.services.urlopen')
-    def test_classify_ticket_prefers_openai_proxy(self, mock_urlopen):
+    def test_classify_ticket_prefers_freeloader_api(self, mock_urlopen):
         mock_urlopen.return_value = FakeHTTPResponse(
             {
                 'choices': [
@@ -295,7 +295,7 @@ class TicketClassificationServiceTests(SimpleTestCase):
         request = mock_urlopen.call_args.args[0]
         payload = json.loads(request.data.decode('utf-8'))
 
-        self.assertEqual(request.full_url, 'http://proxy.test/v1/chat/completions')
+        self.assertEqual(request.full_url, 'http://freeloader.test/v1/chat/completions')
         self.assertEqual(payload['model'], 'freeloader')
         self.assertFalse(payload['stream'])
         self.assertEqual(payload['messages'][0]['role'], 'user')
@@ -308,11 +308,11 @@ class TicketClassificationServiceTests(SimpleTestCase):
 
     @patch.dict(
         'os.environ',
-        {'OPENAI_PROXY_BASE_URL': 'http://proxy.test/v1'},
+        {'FREELOADER_API_BASE_URL': 'http://freeloader.test/v1'},
         clear=False,
     )
     @patch('tickets.services.urlopen', side_effect=URLError('bridge offline'))
-    def test_classify_ticket_proxy_failure_returns_nulls(self, _mock_urlopen):
+    def test_classify_ticket_freeloader_api_failure_returns_nulls(self, _mock_urlopen):
         result = classify_ticket('Any description', title='Bridge fail')
         self.assertEqual(
             result,

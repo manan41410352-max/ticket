@@ -237,27 +237,149 @@ def wait_for_input(page, logger: logging.Logger, timeout_seconds: int = 60):
     )
 
 
-def clear_prompt_box(page, input_locator) -> None:
-    input_locator.click()
-    try:
-        input_locator.fill("")
-    except Exception:
-        page.keyboard.press("Control+A")
-        page.keyboard.press("Backspace")
+def _normalize_prompt_text(value: str | None) -> str:
+    if not value:
+        return ""
+
+    return (
+        value.replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("\u200b", "")
+        .replace("\xa0", " ")
+        .strip()
+    )
+
+
+def _canonicalize_prompt_text(value: str | None) -> str:
+    return "".join(_normalize_prompt_text(value).split())
+
+
+def _read_prompt_box_text(input_locator) -> str:
+    readers = (
+        lambda: input_locator.input_value(timeout=500),
+        lambda: input_locator.text_content(timeout=500),
+        lambda: input_locator.inner_text(timeout=500),
+    )
+
+    for reader in readers:
+        try:
+            value = reader()
+        except Exception:
+            continue
+
+        normalized = _normalize_prompt_text(value)
+        if normalized:
+            return normalized
+
+    return ""
 
 
 def _prompt_box_contains_text(input_locator, prompt: str) -> bool:
-    expected = prompt.replace("\r\n", "\n")
-    try:
-        value = input_locator.input_value(timeout=500).replace("\r\n", "\n")
-        if value == expected:
-            return True
-    except Exception:
-        pass
+    return _canonicalize_prompt_text(_read_prompt_box_text(input_locator)) == _canonicalize_prompt_text(prompt)
 
+
+def _wait_for_prompt_box_text(input_locator, prompt: str, timeout_ms: int = 1500) -> bool:
+    deadline = time.time() + (timeout_ms / 1000.0)
+    while time.time() < deadline:
+        if _prompt_box_contains_text(input_locator, prompt):
+            return True
+        time.sleep(0.05)
+
+    return _prompt_box_contains_text(input_locator, prompt)
+
+
+def clear_prompt_box(page, input_locator, logger: logging.Logger | None = None) -> None:
+    input_locator.click()
+
+    strategies = (
+        ("fast fill clear", lambda: input_locator.fill("")),
+        (
+            "direct DOM clear",
+            lambda: input_locator.evaluate(
+                """
+                (element) => {
+                    const dispatch = () => {
+                        element.dispatchEvent(new Event('input', { bubbles: true }));
+                        element.dispatchEvent(new Event('change', { bubbles: true }));
+                    };
+
+                    element.focus();
+
+                    if ('value' in element) {
+                        element.value = '';
+                        dispatch();
+                        return true;
+                    }
+
+                    if (element.isContentEditable) {
+                        element.textContent = '';
+                        dispatch();
+                        return true;
+                    }
+
+                    return false;
+                }
+                """
+            ),
+        ),
+        (
+            "keyboard clear",
+            lambda: (
+                page.keyboard.press("Control+A"),
+                page.keyboard.press("Backspace"),
+            ),
+        ),
+    )
+
+    for strategy_name, strategy in strategies:
+        try:
+            strategy()
+        except Exception:
+            if logger is not None:
+                logger.warning("Prompt clear strategy failed: %s", strategy_name, exc_info=True)
+            continue
+
+        if _wait_for_prompt_box_text(input_locator, "", timeout_ms=500):
+            return
+
+    if logger is not None:
+        logger.warning(
+            "Prompt box still contains text after clear attempts: %r",
+            _read_prompt_box_text(input_locator),
+        )
+
+
+def _set_prompt_box_text_direct(input_locator, prompt: str) -> bool:
     try:
-        text = input_locator.inner_text(timeout=500).replace("\r\n", "\n").strip()
-        return text == expected.strip()
+        return bool(
+            input_locator.evaluate(
+                """
+                (element, text) => {
+                    const dispatch = () => {
+                        element.dispatchEvent(new Event('input', { bubbles: true }));
+                        element.dispatchEvent(new Event('change', { bubbles: true }));
+                    };
+
+                    element.focus();
+
+                    if ('value' in element) {
+                        element.value = text;
+                        dispatch();
+                        return true;
+                    }
+
+                    if (element.isContentEditable) {
+                        element.textContent = text;
+                        dispatch();
+                        return true;
+                    }
+
+                    return false;
+                }
+                """,
+                prompt,
+            )
+        )
     except Exception:
         return False
 
@@ -266,19 +388,41 @@ def enter_prompt(page, input_locator, prompt: str, logger: logging.Logger, delay
     logger.info("Entering the prompt.")
     try:
         input_locator.fill(prompt)
-        if _prompt_box_contains_text(input_locator, prompt):
+        if _wait_for_prompt_box_text(input_locator, prompt):
             logger.info("Prompt inserted with fast fill.")
             return
     except Exception:
-        logger.warning("Fast fill failed, falling back to typing.", exc_info=True)
+        logger.warning("Fast fill failed, trying alternate input methods.", exc_info=True)
+
+    logger.info("Fast fill did not stick, trying direct DOM insertion.")
+    if _set_prompt_box_text_direct(input_locator, prompt) and _wait_for_prompt_box_text(
+        input_locator,
+        prompt,
+    ):
+        logger.info("Prompt inserted with direct DOM set.")
+        return
 
     logger.info("Falling back to keyboard typing.")
-    clear_prompt_box(page, input_locator)
+    clear_prompt_box(page, input_locator, logger)
+    input_locator.click()
+    try:
+        page.keyboard.insert_text(prompt)
+        if _wait_for_prompt_box_text(input_locator, prompt):
+            logger.info("Prompt inserted with keyboard insert_text.")
+            return
+    except Exception:
+        logger.warning("Keyboard insert_text failed, falling back to sequential typing.", exc_info=True)
+
+    clear_prompt_box(page, input_locator, logger)
+    input_locator.click()
     for character in prompt:
         if character == "\n":
             page.keyboard.press("Shift+Enter")
         else:
             page.keyboard.type(character, delay=delay_ms)
+
+    if not _wait_for_prompt_box_text(input_locator, prompt):
+        raise FreeloaderError("Freeloader could not populate the message box.")
 
 
 def submit_prompt(page, logger: logging.Logger) -> None:
@@ -446,7 +590,7 @@ def run_assistant_prompt(prompt: str, timeout: int) -> str:
             previous_turns = conversation_turn_count(page)
             previous_assistant_turns = assistant_turn_count(page)
 
-            clear_prompt_box(page, input_locator)
+            clear_prompt_box(page, input_locator, logger)
             enter_prompt(page, input_locator, prompt, logger, config.type_delay_ms)
             submit_prompt(page, logger)
 

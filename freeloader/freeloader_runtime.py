@@ -80,14 +80,15 @@ def configure_stdio() -> None:
 
 def guess_browser_path() -> Path | None:
     candidates = [
+        Path.home() / "AppData/Local/BraveSoftware/Brave-Browser/Application/brave.exe",
         Path("C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"),
+        Path("C:/Program Files (x86)/BraveSoftware/Brave-Browser/Application/brave.exe"),
+        Path.home() / "AppData/Local/Google/Chrome/Application/chrome.exe",
         Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
         Path("C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"),
-        Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"),
-        Path("C:/Program Files/Microsoft/Edge/Application/msedge.exe"),
-        Path.home() / "AppData/Local/BraveSoftware/Brave-Browser/Application/brave.exe",
-        Path.home() / "AppData/Local/Google/Chrome/Application/chrome.exe",
         Path.home() / "AppData/Local/Microsoft/Edge/Application/msedge.exe",
+        Path("C:/Program Files/Microsoft/Edge/Application/msedge.exe"),
+        Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"),
     ]
     for candidate in candidates:
         if candidate.exists():
