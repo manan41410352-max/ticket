@@ -8,7 +8,7 @@ const buildDir = path.join(rootDir, 'build');
 const indexPath = path.join(buildDir, 'index.html');
 const frontendPort = Number(process.env.FRONTEND_PORT || 3000);
 const backendUrl = new URL(process.env.BACKEND_URL || 'http://127.0.0.1:8000');
-const proxyClient = backendUrl.protocol === 'https:' ? https : http;
+const backendClient = backendUrl.protocol === 'https:' ? https : http;
 
 const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
@@ -69,8 +69,8 @@ function resolveFilePath(requestPath) {
   return indexPath;
 }
 
-function proxyApiRequest(request, response) {
-  const proxyRequest = proxyClient.request(
+function forwardApiRequest(request, response) {
+  const backendRequest = backendClient.request(
     {
       protocol: backendUrl.protocol,
       hostname: backendUrl.hostname,
@@ -82,13 +82,13 @@ function proxyApiRequest(request, response) {
         host: backendUrl.host,
       },
     },
-    (proxyResponse) => {
-      response.writeHead(proxyResponse.statusCode || 502, proxyResponse.headers);
-      proxyResponse.pipe(response);
+    (backendResponse) => {
+      response.writeHead(backendResponse.statusCode || 502, backendResponse.headers);
+      backendResponse.pipe(response);
     }
   );
 
-  proxyRequest.on('error', (error) => {
+  backendRequest.on('error', (error) => {
     response.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
     response.end(
       JSON.stringify({
@@ -98,7 +98,7 @@ function proxyApiRequest(request, response) {
     );
   });
 
-  request.pipe(proxyRequest);
+  request.pipe(backendRequest);
 }
 
 const server = http.createServer((request, response) => {
@@ -114,7 +114,7 @@ const server = http.createServer((request, response) => {
   }
 
   if (request.url.startsWith('/api/')) {
-    proxyApiRequest(request, response);
+    forwardApiRequest(request, response);
     return;
   }
 
@@ -136,6 +136,6 @@ const server = http.createServer((request, response) => {
 
 server.listen(frontendPort, () => {
   console.log(
-    `Frontend server running at http://127.0.0.1:${frontendPort} and proxying /api to ${backendUrl.origin}`
+    `Frontend server running at http://127.0.0.1:${frontendPort} and forwarding /api to ${backendUrl.origin}`
   );
 });

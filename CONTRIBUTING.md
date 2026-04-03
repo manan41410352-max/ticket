@@ -29,10 +29,9 @@ cd frontend
 npm run build
 ```
 
-Proxy sanity checks:
+Freeloader sanity checks:
 
 ```powershell
-.\.venv\Scripts\python chatgpt_openai_proxy.py --version
 .\.venv\Scripts\python -m freeloader --version
 ```
 

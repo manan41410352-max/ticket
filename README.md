@@ -6,7 +6,7 @@ An open-source support ticket application with a React frontend, a Django REST b
 
 - create, list, filter, search, and update support tickets
 - view ticket statistics from the admin dashboard
-- classify tickets into category and priority using a local OpenAI-compatible proxy
+- classify tickets into category and priority using the local Freeloader API
 - run locally without Docker or with a Docker Compose stack
 - keep AI classification non-blocking when the local browser-based AI layer is unavailable
 
@@ -15,7 +15,7 @@ An open-source support ticket application with a React frontend, a Django REST b
 - Frontend: React + esbuild
 - Backend: Django + Django REST Framework
 - Database: SQLite for local development, PostgreSQL in Docker
-- AI bridge: local OpenAI-compatible proxy backed by vendored `freeloader`
+- AI bridge: local Freeloader API backed by vendored `freeloader`
 
 ## Repository Structure
 
@@ -28,6 +28,29 @@ freeloader/   Vendored local browser-driven AI runtime
 ## Quick Start
 
 ### Local
+
+The shortest local startup flow is:
+
+```powershell
+.\run.cmd
+```
+
+If you want the AI helper browser to stay in the background:
+
+```powershell
+.\run.cmd -HeadlessAI
+```
+
+If you want install and run as two separate commands:
+
+```powershell
+.\setup.cmd
+.\run.cmd
+```
+
+`run.cmd` applies migrations, rebuilds the frontend, and launches the backend, Freeloader service, and frontend in separate PowerShell windows. The app opens in your default browser, while the AI worker prefers Brave if it is installed.
+
+If you prefer the manual workflow, use the commands below.
 
 ```powershell
 python -m venv .venv
@@ -48,11 +71,11 @@ Start the backend:
 .\.venv\Scripts\python backend\manage.py runserver 127.0.0.1:8000
 ```
 
-Start the local AI proxy in another terminal:
+Start the Freeloader service in another terminal:
 
 ```powershell
-$env:FREELOADER_BROWSER_MODE="managed"
-.\.venv\Scripts\python chatgpt_openai_proxy.py --host 127.0.0.1 --port 11435
+$env:FREELOADER_BROWSER_MODE="auto"
+.\.venv\Scripts\python -m freeloader serve --host 127.0.0.1 --port 11435
 ```
 
 Start the frontend in a third terminal:
@@ -72,11 +95,11 @@ Copy the example environment file:
 Copy-Item .env.example .env
 ```
 
-Run the local AI proxy on the host:
+Run the Freeloader service on the host:
 
 ```powershell
-$env:FREELOADER_BROWSER_MODE="managed"
-.\.venv\Scripts\python chatgpt_openai_proxy.py --host 127.0.0.1 --port 11435
+$env:FREELOADER_BROWSER_MODE="auto"
+.\.venv\Scripts\python -m freeloader serve --host 127.0.0.1 --port 11435
 ```
 
 Then start the stack:
@@ -104,7 +127,7 @@ Backend base URL: `http://127.0.0.1:8000/api`
 - `GET /tickets/stats/`
 - `POST /tickets/classify/`
 
-AI proxy base URL: `http://127.0.0.1:11435/v1`
+Freeloader API base URL: `http://127.0.0.1:11435/v1`
 
 - `GET /models`
 - `POST /chat/completions`
@@ -131,10 +154,9 @@ cd frontend
 npm run build
 ```
 
-Proxy sanity:
+Freeloader sanity:
 
 ```powershell
-.\.venv\Scripts\python chatgpt_openai_proxy.py --version
 .\.venv\Scripts\python -m freeloader --version
 ```
 

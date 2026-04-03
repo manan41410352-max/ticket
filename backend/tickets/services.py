@@ -21,8 +21,6 @@ CLASSIFICATION_TIMEOUT_SECONDS = 45
 def _discover_project_root():
     current = Path(__file__).resolve().parent
     for candidate in (current, *current.parents):
-        if (candidate / 'chatgpt_openai_proxy.py').is_file():
-            return candidate
         if (candidate / FREELOADER_MODULE_NAME / FREELOADER_PACKAGE_MARKER).is_file():
             return candidate
     return Path(__file__).resolve().parents[1]
@@ -131,21 +129,21 @@ def _parse_first_json_object(raw_text: str):
     raise json.JSONDecodeError('No JSON object found in text', cleaned, 0)
 
 
-def _openai_proxy_base_url():
-    return os.environ.get('OPENAI_PROXY_BASE_URL', '').strip()
+def _freeloader_api_base_url():
+    return os.environ.get('FREELOADER_API_BASE_URL', '').strip()
 
 
-def _openai_proxy_model():
-    return os.environ.get('OPENAI_PROXY_MODEL', 'freeloader').strip()
+def _freeloader_api_model():
+    return os.environ.get('FREELOADER_API_MODEL', 'freeloader').strip()
 
 
-def _classify_with_openai_proxy(title: str, description: str):
+def _classify_with_freeloader_api(title: str, description: str):
     prompt = _build_classification_prompt(title, description)
     request = Request(
-        url=urljoin(f"{_openai_proxy_base_url().rstrip('/')}/", 'chat/completions'),
+        url=urljoin(f"{_freeloader_api_base_url().rstrip('/')}/", 'chat/completions'),
         data=json.dumps(
             {
-                'model': _openai_proxy_model(),
+                'model': _freeloader_api_model(),
                 'messages': [
                     {
                         'role': 'user',
@@ -156,7 +154,7 @@ def _classify_with_openai_proxy(title: str, description: str):
             }
         ).encode('utf-8'),
         headers={
-            'Authorization': f"Bearer {os.environ.get('OPENAI_PROXY_API_KEY', 'dummy')}",
+            'Authorization': f"Bearer {os.environ.get('FREELOADER_API_KEY', 'dummy')}",
             'Content-Type': 'application/json',
         },
         method='POST',
@@ -217,13 +215,13 @@ def _classify_with_freeloader_subprocess(title: str, description: str):
         return _null_suggestions()
 
 
-def classify_ticket(description: str, title: str = '', allow_proxy: bool = True):
+def classify_ticket(description: str, title: str = '', allow_freeloader_api: bool = True):
     description = description.strip()
     title = title.strip()
 
-    if allow_proxy and _openai_proxy_base_url():
+    if allow_freeloader_api and _freeloader_api_base_url():
         try:
-            return _classify_with_openai_proxy(title, description)
+            return _classify_with_freeloader_api(title, description)
         except (
             HTTPError,
             URLError,
@@ -231,7 +229,7 @@ def classify_ticket(description: str, title: str = '', allow_proxy: bool = True)
             json.JSONDecodeError,
             OSError,
         ) as exc:
-            logger.warning('OpenAI proxy classification failed: %s', exc)
+            logger.warning('Freeloader API classification failed: %s', exc)
             return _null_suggestions()
 
     return _classify_with_freeloader_subprocess(title, description)
